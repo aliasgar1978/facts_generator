@@ -4,7 +4,7 @@
 # -----------------------------------------------------------------------------
 # IMPORTS
 # -----------------------------------------------------------------------------
-from nettoolkit import JSet, IO, STR
+from nettoolkit import Juniper, IO, STR
 
 from .dev_juniper import JuniperTasks
 from .dev_cisco import CiscoTasks
@@ -74,9 +74,9 @@ class InitTask():
 			self.tasks.get_aaza()
 
 		elif self.dev_type == 'juniper':
-			j = JSet(input_list=self.run_list)
-			j.to_set
-			self.tasks = JuniperTasks(run_list=j.output, 
+			j = Juniper(input_file=self.files['config'])
+			set_output = J.convert_to_set()
+			self.tasks = JuniperTasks(run_list=set_output, 
 									lldp_list=self.lldp_list,
 									int_status_list=self.int_status_list)
 			self.tasks.get_aaza()
