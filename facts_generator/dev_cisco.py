@@ -108,14 +108,15 @@ class CiscoTasks(Tasks):
 			# snmp string
 			if line.startswith("snmp-server location "):
 				self.snmp_location = line[21:].strip()
-				# print(self.snmp_location)
 			# exec banner
 			if line.startswith("banner exec "):
 				self.banner = line[14:].strip()
 
 		# bgp section config for vrf
+		self.facts["bgp"] = {}
 		if self.bgp:
 			self.bgp_aaza(self.get_section_config('bgp', self.bgp[0]))
+
 
 		return {'if_types': self.if_types, 
 				'ifs': self.ifs, 
@@ -224,6 +225,7 @@ class CiscoTasks(Tasks):
 		for vrf in self.vrfs:
 			section_conf = self.get_section_config('vrfs', vrf)
 			facts_vrfs[vrf] = self.vrf_rd_rt(section_conf) 
+			facts_vrfs[vrf].update({'[vrf]': vrf})
 
 	def get_facts_vlans(self):
 		"""vlan Facts"""
@@ -242,7 +244,10 @@ class CiscoTasks(Tasks):
 		facts_statics = self.facts["statics"]
 		for route in self.routes:
 			route, route_attributes = self.static_route(route)
+			msr = self.matching_static_route(facts_statics, route)
+			if msr: route = route + "_" + str(msr)
 			facts_statics[route] = route_attributes
+
 
 	def get_facts_ospf(self):
 		"""ospf facts"""
@@ -435,22 +440,27 @@ class CiscoTasks(Tasks):
 		else: 
 			name = ""
 		name = name.rstrip()
+		spl_route = route.split(" track ")
+		track = spl_route[-1] if len(spl_route) == 2 else None
 		route = route.split(' tag ')
 		tag = route[1].rstrip() if len(route) == 2 else None
 		route = route[0].split("ip route ")[-1].split()
 		vrf = route[1] if route[0] == 'vrf' else None
 		route_idx = 2 if vrf else 0
 		_subnet = route[route_idx] + "/" + str(IP.bin2dec(route[route_idx+1]))
-		subnet = addressing(_subnet)
+		subnet = str(addressing(_subnet))
+		subnet_header = vrf + "_" + str(subnet) if vrf else str(subnet)
 		try:
 			next_hop = addressing(route[route_idx+2] + "/32")
 		except:
 			next_hop = None
-		attribute = {'vrf': vrf,
-					'name': name,
-					'tag': tag,
-					'next_hop': next_hop,}
-		return subnet, attribute
+		attribute = {'name': name, 'subnet': subnet }
+		if track: attribute.update({'track': track})
+		if vrf: attribute.update({'[vrf]': vrf})
+		if tag: attribute.update({'tag': tag})
+		if next_hop: attribute.update({'next_hop': next_hop})
+
+		return subnet_header, attribute
 
 	""" OSPF """
 
@@ -531,5 +541,6 @@ class CiscoTasks(Tasks):
 			if last_peer and line.lstrip().startswith('neighbor ' + last_peer ):
 				peer_group_neighbours[last_peer]['description'] = " ".join(l[3:])
 		return peer_group_neighbours
+
 
 # ---------------------------------------------------------------------------- #

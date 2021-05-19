@@ -52,7 +52,6 @@ class InitTask():
 				line.lstrip().startswith("set system host-name ")
 				):
 				self.hostname = line.split()[-1]
-				# print(self.hostname)
 
 	def detect_config_type(self):
 		self.dev_type = None
@@ -74,7 +73,7 @@ class InitTask():
 			self.tasks.get_aaza()
 
 		elif self.dev_type == 'juniper':
-			j = Juniper(input_file=self.files['config'])
+			J = Juniper(input_file=self.files['config'])
 			set_output = J.convert_to_set()
 			self.tasks = JuniperTasks(run_list=set_output, 
 									lldp_list=self.lldp_list,

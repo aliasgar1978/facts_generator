@@ -30,6 +30,14 @@ def flat_dict(given_int_dictionary, int_type=None):
 	return d
 
 
+def merge_vlan_intVlan(facts):
+	intvlan_attribs = facts['vlans']
+	for vlnumber, vlanattrib in intvlan_attribs.items():
+		for intvl, intvlattr in facts['interfaces']['VLAN'].items():
+			if vlnumber == intvlattr['int_number']:
+				intvlattr.update(vlanattrib)
+				break
+
 # ---------------------------------------------------------------------------- #
 # Common Tasks
 # ---------------------------------------------------------------------------- #
@@ -49,7 +57,7 @@ class Tasks():
 		self.interface_aaza()
 		self.lldp_aaza()
 		self.get_facts_standard()
-		self.merge_vlan_intVlan()
+		merge_vlan_intVlan(self.facts)
 
 	def instance_var(self):
 		self.ifs, self.vrfs, self.vlans, self.vlan_member_names = [], [], [], []
@@ -70,23 +78,16 @@ class Tasks():
 		self.get_facts_interfaces()
 		self.get_facts_vlans()
 		if len(self.vrfs) > 0: self.get_facts_vrfs()
-		if self.routes: self.get_facts_static()
-		if self.ospf: self.get_facts_ospf()
-		if self.bgp: self.get_facts_bgp(isInstance=False)
-		if self.bgp: self.get_facts_bgp(isInstance=True)
+		self.get_facts_static()
+		self.get_facts_ospf()
+		self.get_facts_bgp(isInstance=False)
+		self.get_facts_bgp(isInstance=True)		
 		self.get_facts_lldp()
 		self.get_facts_int_status()
+		self.vrf_for_vlans()
+		self.get_facts_banner()
+		self.get_facts_snmp_location()
 
-	# @staticmethod
-	# def flat_dict(int_type, given_int_dictionary):
-	# 	d = {'int_type': int_type}
-	# 	for int_id, int_dict in given_int_dictionary.items():
-	# 		if isinstance(int_dict, (dict, OrderedDict)):
-	# 			for col_name_suffix, value in nested_col_values(int_dict):
-	# 				d[str(int_id)+"_"+col_name_suffix] = value
-	# 		else:
-	# 			d[int_id] = int_dict
-	# 	return d
 
 	""" LLDP PROCESS """
 
@@ -132,7 +133,6 @@ class Tasks():
 	def physical_interface_int_status_add_ons(self, interface_shortname):
 		for int_type in self.if_types:
 			for phy_if, if_attributes in self.facts["interfaces"][int_type].items():
-				# print(if_attributes.keys())
 				if if_attributes.get("short_name") and if_attributes["short_name"] == interface_shortname:
 					return (self.facts["interfaces"][int_type][phy_if], 
 							self.interface_status_para(interface_shortname))
@@ -149,14 +149,21 @@ class Tasks():
 		return description
 
 	""" vlans """
+	def vrf_for_vlans(self):
+		"""vlan facts attributes using VlanCalculator"""
+		facts_vlans = self.facts["vlans"]
+		for vlan in facts_vlans:			
+			facts_vlans[vlan]["vlan_vrf"] = self.vrf_for_vlan(vlan)
 
-	def merge_vlan_intVlan(self):
-		intvlan_attribs = self.facts['vlans']
-		for vlnumber, vlanattrib in intvlan_attribs.items():
-			for intvl, intvlattr in self.facts['interfaces']['VLAN'].items():
-				if vlnumber == intvlattr['int_number']:
-					intvlattr.update(vlanattrib)
-					break
+	def vrf_for_vlan(self, vlan):
+		""" -->vrf name for given vlan,	/Child
+			default is '' """
+		if self.facts['interfaces']['VLAN'].get('Vlan'+str(vlan)):
+			return self.facts['interfaces']['VLAN']['Vlan'+str(vlan)]['[vrf]']
+		else:
+			return ''
+
+
 
 	""" IP Address + n """
 
@@ -208,5 +215,25 @@ class Tasks():
 				shrink_chars = int_types[STR.if_prefix(_if)]
 				break
 		return shrink_chars
+
+	""" BANNER """
+
+	def get_facts_banner(self):
+		self.facts["[banner]"] = self.banner
+	def get_facts_snmp_location(self):
+		self.facts["snmp_location"] = self.snmp_location
+
+	######## COMMONS ######
+
+	def matching_static_route(self, facts_statics, route):
+		i = 0
+		original_route = route
+		while True:
+			if facts_statics.get(route):
+				i += 1
+				route = original_route + "_" + str(i)
+			else:
+				break
+		return i
 
 # ---------------------------------------------------------------------------- #
