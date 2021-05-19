@@ -93,9 +93,9 @@ class JuniperTasks(Tasks):
 				'ifs': self.ifs, 
 				'vrfs': self.vrfs, 
 				'vlans': self.vlans,
-				# 'ospf': self.ospf,
-				# 'bgp': self.bgp,
-				# 'bgp_af': self.bgp_af,
+				'ospf': self.ospf,
+				'bgp': self.bgp,
+				'bgp_af': self.bgp_af,
 				}
 
 	def aaza_vlans(self, line):
@@ -221,6 +221,7 @@ class JuniperTasks(Tasks):
 			self.vrf_int_vrf(section_conf)
 			self.vrf_int_helpers(section_conf)
 			facts_vrfs[vrf] = self.vrf_rd_rt(section_conf)
+			facts_vrfs[vrf].update({'[vrf]': vrf})
 
 	def get_facts_vlans(self):
 		"""vlan Facts"""
@@ -453,25 +454,59 @@ class JuniperTasks(Tasks):
 
 	""" Statics """
 
+	# def static_route(self):
+	# 	"""--> static route parameters """
+	# 	routes, route, vrf, name, tag, next_hop, prev_route = {}, None, None, None, None, None, 'None'
+	# 	for line in self.run_list:
+	# 		if STR.found(line, "routing-options static route"):
+	# 			spl = line.split()
+	# 			vrf = spl[2] if spl[1] == 'routing-instances' else 'global'
+	# 			route_idx = spl.index("route") + 1
+	# 			route = IPv4(spl[route_idx])
+	# 			subnet_header = vrf + "_" + str(subnet) if vrf else str(subnet)
+	# 			if str(route) != str(prev_route) and not routes.get(route):
+	# 				routes[route] = {'vrf': vrf, 'name':''}
+	# 				prev_route = route
+	# 			if STR.found(line, "tag"): 
+	# 				tag = spl[-1]
+	# 				routes[prev_route]['tag'] = tag
+	# 			if STR.found(line, "next-hop"): 
+	# 				next_hop = IPv4(spl[-1]+"/32")
+	# 				routes[prev_route]['next_hop'] = next_hop
+	# 	return routes
+
 	def static_route(self):
 		"""--> static route parameters """
 		routes, route, vrf, name, tag, next_hop, prev_route = {}, None, None, None, None, None, 'None'
 		for line in self.run_list:
 			if STR.found(line, "routing-options static route"):
 				spl = line.split()
-				vrf = spl[2] if spl[1] == 'routing-instances' else 'global'
 				route_idx = spl.index("route") + 1
-				route = IPv4(spl[route_idx])
-				if str(route) != str(prev_route) and not routes.get(route): 
-					routes[route] = {'vrf': vrf, 'name':''}
-					prev_route = route
-				if STR.found(line, "tag"): 
-					tag = spl[-1]
-					routes[prev_route]['tag'] = tag
-				if STR.found(line, "next-hop"): 
-					next_hop = IPv4(spl[-1]+"/32")
-					routes[prev_route]['next_hop'] = next_hop
+				subnet = IPv4(spl[route_idx])
+				vrf = spl[2] if spl[1] == 'routing-instances' else None
+				tag = spl[-1] if STR.found(line, "tag") else None
+				subnet_header = vrf + "_" + str(subnet) if vrf else str(subnet)				
+				next_hop = IPv4(spl[-1]+"/32") if STR.found(line, "next-hop") else None
+				if str(subnet) != str(prev_route):
+					if routes.get(subnet_header):
+						attribute = routes[subnet_header]
+						if next_hop:
+							if attribute.get('next_hop'):
+								msr = self.matching_static_route(routes, subnet_header)
+								if msr: new_subnet_header = subnet_header + "_" + str(msr)
+								routes[new_subnet_header] = dict(routes[subnet_header])
+								attribute = routes[new_subnet_header]
+							attribute.update({'next_hop': next_hop})
+					else:
+						routes[subnet_header] = {'subnet': subnet}
+						attribute = routes[subnet_header]
+						if next_hop: attribute.update({'next_hop': next_hop})
+						subnet_header = subnet
+				if vrf: attribute.update({'[vrf]': vrf})
+				if tag: attribute.update({'tag': tag})
+
 		return routes
+
 
 	""" OSPF """
 
@@ -485,15 +520,18 @@ class JuniperTasks(Tasks):
 			if not ospf.get(vrf): 
 				ospf[vrf] = {}
 				ospf_instance = ospf[vrf]
-			if 'area' in spl and 'area-range' in spl:
+				ospf_instance['instance'] = vrf
+			if 'area' in spl:
 				area_idx = spl.index('area') + 1
-				arearange_idx = spl.index('area-range') + 1
-				if not ospf_instance.get('area_summaries'):
-					ospf_instance['area_summaries'] = {}
-					instance_summary = ospf_instance['area_summaries']
-				if not instance_summary.get(spl[area_idx]):
-					instance_summary[spl[area_idx]] = []
-				instance_summary[spl[area_idx]].append(spl[arearange_idx])
+				area = "area_" + spl[area_idx]
+				if not ospf_instance.get(area): ospf_instance[area] = {}				
+				area_of_instance = ospf_instance[area]
+				if 'area-range' in spl:
+					arearange_idx = spl.index('area-range') + 1
+					area_summary = spl[arearange_idx]
+					if not ospf_instance.get('area_summaries'): area_of_instance['area_summaries'] = []
+					area_summaries = area_of_instance['area_summaries']
+					area_summaries.append(spl[arearange_idx])
 
 		return ospf
 
@@ -545,6 +583,8 @@ class JuniperTasks(Tasks):
 					peer_grp['neighbor_type'] = neighbor_type
 
 		return bgp
+
+
 
 # ---------------------------------------------------------------------------- #
 if __name__ == "__main__":
