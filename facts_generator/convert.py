@@ -43,8 +43,6 @@ class FactsToDf():
 		customer_var=None,
 		):
 		self.customer_var = customer_var
-		from pprint import pprint
-		pprint(facts['ospf'])
 		self.process_table(facts)
 		self.process_var(facts)
 
@@ -98,22 +96,26 @@ class FactsToDf():
 		table = {}
 
 		# -- interfaces
-		for int_type, all_ints_dict in table_facts['interfaces'].items():
-			for int_name, int_dict in all_ints_dict.items():
-				table[int_name] = flat_dict(int_dict, int_type)
-				table[int_name].update({'[Contender]': int_name})
+		if table_facts.get('interfaces'):
+			for int_type, all_ints_dict in table_facts['interfaces'].items():
+				for int_name, int_dict in all_ints_dict.items():
+					table[int_name] = flat_dict(int_dict, int_type)
+					table[int_name].update({'[Contender]': int_name})
 
 		# -- static routes
-		for route_x, route_dict in table_facts['statics'].items():
-			table[route_x] = flat_dict(route_dict, 'static_route')
+		if table_facts.get('statics'):
+			for route_x, route_dict in table_facts['statics'].items():
+				table[route_x] = flat_dict(route_dict, 'static_route')
 
 		# -- vrfs
-		for vrf_x, vrf_dict in table_facts['vrfs'].items():
-			table[vrf_x] = flat_dict(vrf_dict, 'VRFS')
+		if table_facts.get('vrfs'):
+			for vrf_x, vrf_dict in table_facts['vrfs'].items():
+				table[vrf_x] = flat_dict(vrf_dict, 'VRFS')
 
 		# -- ospf
-		for _x, _dict in table_facts['ospf'].items():
-			table[_x] = flat_dict(_dict, 'OSPF')
+		if table_facts.get('ospf'):
+			for _x, _dict in table_facts['ospf'].items():
+				table[_x] = flat_dict(_dict, 'OSPF')
 
 		df_table = pd.DataFrame.from_dict(table).T
 		return df_table

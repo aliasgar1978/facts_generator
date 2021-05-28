@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="facts_generator",
-    version="0.0.2",
+    version="0.0.4",
     author="ALIASGAR - ALI",
     author_email="aholo2000@gmail.com",
     description="Excel Facts File Generate from Networking Device Output|Config",
@@ -19,5 +19,6 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.7',
+    install_require=['xlrd', 'pandas', 'openpyxl', 'nettoolkit']
 )
 

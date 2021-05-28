@@ -64,7 +64,7 @@ fg.to_file(output_path)			# 4. write output facts to given path
 
 """
 
-__ver__ = "0.0.3"
+__ver__ = "0.0.4"
 
 __all__ = [ "FactsGen" ]
 
