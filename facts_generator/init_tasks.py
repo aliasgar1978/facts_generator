@@ -4,7 +4,7 @@
 # -----------------------------------------------------------------------------
 # IMPORTS
 # -----------------------------------------------------------------------------
-from nettoolkit import Juniper, IO, STR
+from nettoolkit import JSet, IO, STR
 
 from .dev_juniper import JuniperTasks
 from .dev_cisco import CiscoTasks
@@ -16,20 +16,37 @@ from .dev_cisco import CiscoTasks
 class InitTask():
 
 
-	def __init__(self, hostname=None, files=None):
-		self.hostname = hostname 					# depricated: was used in netNinja
+	def __init__(self, files=None):
 		self.files = files
-		# self.file_list = IO.file_to_list(file)
-		self.create_commands_list()
+		if isinstance(files, dict): self.create_commands_list_from_dict_of_files()
+		if isinstance(files, str): self.create_commands_list_from_a_file()
 		self.set_hostname_of_device()
-		# self.split_commands_lists()
 		self.detect_config_type()
 		self.execute_vendor_tasks()
 
-	def create_commands_list(self):
+	def create_commands_list_from_dict_of_files(self):
 		self.run_list = IO.file_to_list(self.files['config'])
 		self.lldp_list = IO.file_to_list(self.files['neighbour'])
 		self.int_status_list = IO.file_to_list(self.files['interfaces'])
+		self.add_output_lists_to_cmd_dict()
+
+	def create_commands_list_from_a_file(self):
+		(self.run_list, self.lldp_list, self.int_status_list) = ([''], [''], [''])
+		self.add_output_lists_to_cmd_dict()
+		prefix = "# output for command: "
+		prefix_len = len(prefix)
+		cmd = None
+		with open(self.files, 'r') as f:
+			lines = f.readlines()
+		for line in lines:
+			if line.startswith(prefix):
+				cmd = line[prefix_len:].strip()
+				if not self.cmds.get(cmd): cmd=None
+			if not cmd: continue
+			if line.startswith(("#", "!")): continue
+			self.cmds[cmd].append(line)
+
+	def add_output_lists_to_cmd_dict(self):
 		# ... Add more as and when add new commands
 		self.cmds = {
 				# Cisco Commands
@@ -37,7 +54,6 @@ class InitTask():
 				'sh run': self.run_list, 
 				'sh lldp nei': self.lldp_list,
 				'sh int status': self.int_status_list,
-
 				# Juniper Commands
 				'show configuration | no-more': self.run_list, 
 				'show lldp neighbors | no-more': self.lldp_list, 
@@ -73,8 +89,9 @@ class InitTask():
 			self.tasks.get_aaza()
 
 		elif self.dev_type == 'juniper':
-			J = Juniper(input_file=self.files['config'])
-			set_output = J.convert_to_set()
+			J = JSet(input_list=self.run_list)
+			J.to_set
+			set_output = J.output
 			self.tasks = JuniperTasks(run_list=set_output, 
 									lldp_list=self.lldp_list,
 									int_status_list=self.int_status_list)

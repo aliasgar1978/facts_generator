@@ -178,8 +178,8 @@ class Output_Process():
 			}
 
 	def output_parse(self, files=None):
-		if not isinstance(files, dict):
-			raise Exception("Incorrect Input `files` should be in dict of lists")
+		if not isinstance(files, (dict, str)):
+			raise Exception("Incorrect Input `files` should be in dict of lists or single file string")
 		iT = InitTask(files=files)
 		self._facts = iT.tasks.facts
 
