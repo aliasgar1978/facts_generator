@@ -19,6 +19,6 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.7',
-    install_require=['xlrd', 'pandas', 'openpyxl', 'nettoolkit']
+    install_requires=['xlrd', 'pandas', 'openpyxl', 'nettoolkit']
 )
 
