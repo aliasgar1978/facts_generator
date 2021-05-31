@@ -3,55 +3,38 @@ __doc__ = "Excel Facts Generation from configuration output"
 """
 Mandatory Requirements 
 ======================
-pandas and it’s dependent packages (xlrd, ...)
+pandas and it’s dependent packages (xlrd, openpyxl)
 nettoolkit
 
 Usage Example
 =============
 from facts_generator import FactsGen
 
-##### define capture files in a dictionary with defined keys #####
-sh_run = "show_run.log"
-sh_int = "show_int_status.log"
-sh_lldp = "show_lldp_neighbor.log"
+# # single file with all outputs
+datapath = "c:/Users/ALI/OneDrive/Desktop/Data/"
+capture_file = datapath + "switch_op.log"
 
-captures = {
-	'config': sh_run,
-	'interfaces': sh_int,
-	'neighbour': sh_lldp,
-	}
+# # output distributed in mutliple files
+# conf = datapath + 'conf.log' 
+# intf = datapath + "interfaces.log"
+# lldp = datapath + "lldp.log"
+# capture_file = {'config': conf, 'interfaces': intf, 'neighbour': lldp }
 
 ##### Executions #####
-fg = FactsGen()					# 1. create object
-fg.parse(captures)				# 2. parse captures
+fg = FactsGen()						# 1. create object
+fg.parse(capture_file)				# 2. parse captures
 # ------------------------------------------------ #
 #             OPTIONAL / CUSTOM VARS
 #               section insert here
+# custom processes on fg.facts to add/modify facts
 # ------------------------------------------------ #
 fg.process(						# 3. Process output
-	# map_sheet=map_sheet,			# optional - std to custom variable map sheet
-	# customer_var=sv.custom_vars,	# optional - customer variables
+    # map_sheet=custom_map_excelsheet,                  # optional
+    # customer_var=additional_customer_variables_dict,  # optional
 	)
-output_path = "."
-fg.to_file(output_path)			# 4. write output facts to given path
+fg.to_file(datapath)			# 4. write output facts to given path, "." for local path
 
 
-# ------------------------------------------------ #
-#             OPTIONAL / CUSTOM VARS
-# ------------------------------------------------ #
-# ##### Define custom changes #####
-# map_sheet = "CUSTOMER/std_custom_var_maps.xlsx"
-
-# ##### Executions / define customer variables #####
-# import CUSTOMER
-# custom_variables = "CUSTOMER/customer_variables.xlsx"
-# sv = CUSTOMER.StaticVar(fg.facts)
-# sv.create(custom_variables)
-# st = CUSTOMER.StaticTables(fg.facts)
-# st.create()
-
-# # [Note: sv.custom_vars => customer_var]
-# ------------------------------------------------ #
 
 # --------------------------------------------------------------------
 
@@ -64,7 +47,7 @@ fg.to_file(output_path)			# 4. write output facts to given path
 
 """
 
-__ver__ = "0.0.4"
+__ver__ = "0.0.5"
 
 __all__ = [ "FactsGen" ]
 

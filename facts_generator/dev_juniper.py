@@ -454,27 +454,6 @@ class JuniperTasks(Tasks):
 
 	""" Statics """
 
-	# def static_route(self):
-	# 	"""--> static route parameters """
-	# 	routes, route, vrf, name, tag, next_hop, prev_route = {}, None, None, None, None, None, 'None'
-	# 	for line in self.run_list:
-	# 		if STR.found(line, "routing-options static route"):
-	# 			spl = line.split()
-	# 			vrf = spl[2] if spl[1] == 'routing-instances' else 'global'
-	# 			route_idx = spl.index("route") + 1
-	# 			route = IPv4(spl[route_idx])
-	# 			subnet_header = vrf + "_" + str(subnet) if vrf else str(subnet)
-	# 			if str(route) != str(prev_route) and not routes.get(route):
-	# 				routes[route] = {'vrf': vrf, 'name':''}
-	# 				prev_route = route
-	# 			if STR.found(line, "tag"): 
-	# 				tag = spl[-1]
-	# 				routes[prev_route]['tag'] = tag
-	# 			if STR.found(line, "next-hop"): 
-	# 				next_hop = IPv4(spl[-1]+"/32")
-	# 				routes[prev_route]['next_hop'] = next_hop
-	# 	return routes
-
 	def static_route(self):
 		"""--> static route parameters """
 		routes, route, vrf, name, tag, next_hop, prev_route = {}, None, None, None, None, None, 'None'
