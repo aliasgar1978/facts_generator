@@ -47,7 +47,7 @@ fg.to_file(datapath)			# 4. write output facts to given path, "." for local path
 
 """
 
-__ver__ = "0.0.5"
+__ver__ = "0.0.6"
 
 __all__ = [ "FactsGen" ]
 
