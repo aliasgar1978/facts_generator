@@ -64,6 +64,7 @@ class Tasks():
 	def instance_var(self):
 		############### OLD SETS ###############
 		self.ifs, self.vrfs, self.vlans, self.vlan_member_names = [], [], [], []
+		# self.vrfs, self.vlans, self.vlan_member_names = [], [], []
 		self.ospf, self.bgp , self.routes = [], [], []
 		self.bgp_af = []
 		self.if_types = {

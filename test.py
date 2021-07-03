@@ -5,7 +5,7 @@ from pprint import pprint
 
 # # single file with all outputs
 datapath = "c:/Users/ALI/Desktop/Data/"
-capture_file = datapath + "switch_op.log"
+capture_file = datapath + "switch_op1.log"
 
 # # output distributed in mutliple files
 # conf = datapath + 'conf.log' 
@@ -18,11 +18,11 @@ fg.parse(capture_file)
 
 # custom processes on fg.facts to add/modify facts
 
-pprint(fg.facts.var)
-# pprint(fg.facts.ifvlans)
+# pprint(fg.facts.var)
+# pprint(fg.facts.ifvlans.keys())
 # pprint(fg.facts.ifphysicals)#['HundredGigE1/0/3'])
 # pprint(fg.facts.ifloopbacks)	
-# pprint(fg.facts.ifaggregates)
+pprint(fg.facts.ifaggregates)
 # pprint(fg.facts.ifranges)
 
 

@@ -88,6 +88,7 @@ class CiscoTasks(Tasks):
 			if (line.startswith(self.starter['vlans'])
 				and not line.startswith("vlan internal")
 				):
+				self.aaza_vlans(line)
 				try:
 					self.vlans.append(int(line.split()[-1]) )
 				except:
@@ -134,10 +135,14 @@ class CiscoTasks(Tasks):
 		for int_type, int_types in self.ifs_identifiers.items():
 			for int_type_type in int_types:
 				if int_type_type in interface:
-					self.add_aaza(interface, self.iftype_ifvar[int_type], para.ifvlan)
+					self.add_aaza(interface, self.iftype_ifvar[int_type], iftype_templ(int_type))
 					return None
 
-
+	def aaza_vlans(self, line):
+		"""add new vlan to aaza"""
+		spl = line.split()
+		vlan = "Vlan"+spl[-1]
+		self.add_aaza(vlan, self.ifvlans, para.ifvlan)
 
 	def interface_aaza(self):
 		"""Interface Aaza from interface status"""
@@ -161,8 +166,31 @@ class CiscoTasks(Tasks):
 							port_detail = self.interfaces_table[detail]
 							continue
 					port_detail[header_item] = detail
-				port_detail['linkstatus'] = port_detail['Status']
+				status = port_detail['Status']
+				port_detail['adminstatus'] = 'down' if status == 'disabled' else 'up'
+				port_detail['linkstatus'] = 'up' if status == 'connected' else 'down'
+				# port_detail['l2orl3'] = 'l3' if port_detail['Vlan'] == 'routed' else 'l2'
+				port_detail['speed'] = port_detail['Speed']
+				port_detail['duplex'] = port_detail['Duplex']
+				port_detail['sfptype'] = port_detail['Type']
 				del(port_detail['Status'])
+				del(port_detail['Speed'])
+				del(port_detail['Duplex'])
+				del(port_detail['Type'])
+				# del(port_detail["Vlan"])
+
+	def get_l2orl3(self, int_section_config):
+		"""interface type - L2 or L3 """
+		l2orl3 = 'l3'
+		for line in int_section_config:
+			spl = line.strip().split()
+			try:
+				if spl[0] == 'switchport':
+					l2orl3 = 'l2'
+					break
+			except: continue
+		return l2orl3
+
 
 	def bgp_aaza(self, bgp_list):
 		"""bgp adddress family lists"""
@@ -217,13 +245,28 @@ class CiscoTasks(Tasks):
 					ifFacts['int_number'] = int(ifFacts['shortname'][2:])
 				section_conf = self.get_section_config('ifs', _if)
 				ifFacts['description'] = self.int_description(section_conf)
-				ifFacts['portstatus'] = self.int_port_status(section_conf)
+				ifFacts['adminstatus'] = self.int_port_status(section_conf)
 				ifFacts['udld'] = self.int_udld_state(section_conf)
-				ifFacts['channel_group'] = self.int_ether_channel(section_conf)
-				ifFacts['switchport'] = self.int_vlans(section_conf)
+				ifFacts.update(self.int_ether_channel(section_conf))
 				ifFacts['vrf'] = self.int_vrf(section_conf)
 				ifFacts.update(self.int_helpers(section_conf))
-				ifFacts.update(self.int_address(section_conf))
+				if ifType in ('AGGREGATED', 'TUNNEL', 'PHYSICAL'):
+					ifFacts['l2orl3'] = self.get_l2orl3(section_conf)
+					ifFacts['switchport'] = self.int_vlans(section_conf)
+				if ifType in ("AGGREGATED", ) and ifFacts['l2orl3'] == 'l2':
+					ifFacts['vlanmembers'] = self.int_vlan_members(section_conf)
+				else:
+					ifFacts.update(self.int_address(section_conf))
+
+	def int_vlan_members(self, int_section_config):
+		"""aggregated interface member vlan/subint"""
+		members = set()
+		for line in int_section_config:
+			if STR.find_any(line, ('trunk allowed vlan', 'access vlan') ):
+				spl = line.split()[-1].split(',')
+				for vl in spl:
+					members.add(int(vl))
+		return members
 
 	def get_facts_vrfs(self):
 		"""vrf Facts"""
@@ -317,7 +360,7 @@ class CiscoTasks(Tasks):
 		status = 'up'
 		for line in int_section_config:
 			if line.lstrip().startswith("shutdown"):
-				status = 'administratively down'
+				status = 'down'
 				break
 		return status
 

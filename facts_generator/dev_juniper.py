@@ -194,7 +194,7 @@ class JuniperTasks(Tasks):
 					ifFacts['int_number'] = None
 				test = ifType == "PHYSICAL"
 				ifFacts['description'] = self.int_description(section_conf)
-				ifFacts['portstatus'] = self.int_port_status(section_conf)
+				ifFacts['adminstatus'] = self.int_port_status(section_conf)
 				ifFacts['udld'] = self.int_udld_state(section_conf)
 				ifFacts.update(self.int_ether_channel(section_conf))
 				if ifType not in ('VLAN', 'LOOPBACK'):
@@ -346,7 +346,7 @@ class JuniperTasks(Tasks):
 		status = 'up'
 		for line in int_section_config:
 			if STR.found(line, "disable"):
-				status = 'administratively down'
+				status = 'down'
 				break
 		return status
 
