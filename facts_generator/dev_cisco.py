@@ -421,7 +421,7 @@ class CiscoTasks(Tasks):
 						break
 				if exclude: continue
 				if spl[-1] in exluded_v6_candidates: continue
-				v6subnet = IPv6(spl[-1])
+				v6subnet = IPv6(spl[-1].lower())
 				break
 		address_vars = {
 			'inet4': {'address': subnet },

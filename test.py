@@ -18,11 +18,11 @@ fg.parse(capture_file)
 
 # custom processes on fg.facts to add/modify facts
 
-# pprint(fg.facts.var)
-# pprint(fg.facts.ifvlans.keys())
+pprint(fg.facts.var)
+# pprint(fg.facts.ifvlans)
 # pprint(fg.facts.ifphysicals)#['HundredGigE1/0/3'])
 # pprint(fg.facts.ifloopbacks)	
-pprint(fg.facts.ifaggregates)
+# pprint(fg.facts.ifaggregates)
 # pprint(fg.facts.ifranges)
 
 
