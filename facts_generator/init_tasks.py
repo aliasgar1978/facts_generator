@@ -43,7 +43,7 @@ class InitTask():
 				cmd = line[prefix_len:].strip()
 				if not self.cmds.get(cmd): cmd=None
 			if not cmd: continue
-			if line.startswith(("#", "!")): continue
+			if line.startswith(("#",)): continue
 			self.cmds[cmd].append(line)
 
 	def add_output_lists_to_cmd_dict(self):

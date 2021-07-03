@@ -182,6 +182,7 @@ class Output_Process():
 			raise Exception("Incorrect Input `files` should be in dict of lists or single file string")
 		iT = InitTask(files=files)
 		self._facts = iT.tasks.facts
+		self.F = iT.tasks
 
 
 

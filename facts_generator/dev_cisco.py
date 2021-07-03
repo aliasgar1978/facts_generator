@@ -5,6 +5,7 @@ from collections import OrderedDict
 from nettoolkit import IPv4, IPv6, addressing, IP, STR, LST
 
 from .tasks import Tasks
+from .templates import iftype_templ, ParametersTemplate as para
 
 # ---------------------------------------------------------------------------- #
 # Cisco CONSTANTS
@@ -53,7 +54,7 @@ class CiscoTasks(Tasks):
 	starter = CISCO_STARTERS
 	lldp_col_header_indexes = CISCO_LLDP_COL_HEADER_INDEXES
 
-	def get_section_config(self, section, name, af_only=False):
+	def get_section_config(self, section, name, af_only=False, test=False):
 		"""--> Section config in list format"""
 		section_config = []
 		start = False
@@ -62,8 +63,12 @@ class CiscoTasks(Tasks):
 				start = True
 			if start:
 				section_config.append(line.rstrip())
-				if af_only and line.rstrip() == ' !': break
-				elif line.rstrip() == "!": break
+				if af_only and line.rstrip() == ' !': 
+					break
+				elif line.rstrip() == "!": 
+					break
+				else:
+					pass
 		return section_config
 
 	""" AAZA """
@@ -73,12 +78,7 @@ class CiscoTasks(Tasks):
 		for line in self.run_list:
 			# Interfaces configs
 			if line.startswith(self.starter['ifs']):
-				self.ifs.append(line.split()[-1])
-				for int_type, int_types in self.ifs_identifiers.items():
-					for int_type_type in int_types:
-						if int_type_type in self.ifs[-1]:
-							self.if_types[int_type].append(self.ifs[-1])
-							break
+				self.aaza_ifs(line)
 				continue
 			# vrf definitions
 			if line.startswith(self.starter['vrfs']):
@@ -128,6 +128,17 @@ class CiscoTasks(Tasks):
 				'route': self.routes,
 				}
 
+	def aaza_ifs(self, line):
+		"""add new interface to aaza"""
+		interface = line.split()[-1]
+		for int_type, int_types in self.ifs_identifiers.items():
+			for int_type_type in int_types:
+				if int_type_type in interface:
+					self.add_aaza(interface, self.iftype_ifvar[int_type], para.ifvlan)
+					return None
+
+
+
 	def interface_aaza(self):
 		"""Interface Aaza from interface status"""
 		headers = None
@@ -150,7 +161,7 @@ class CiscoTasks(Tasks):
 							port_detail = self.interfaces_table[detail]
 							continue
 					port_detail[header_item] = detail
-				port_detail['l2_status'] = port_detail['Status']
+				port_detail['linkstatus'] = port_detail['Status']
 				del(port_detail['Status'])
 
 	def bgp_aaza(self, bgp_list):
@@ -191,32 +202,28 @@ class CiscoTasks(Tasks):
 		"""device hostname"""
 		for line in self.run_list:
 			if line.startswith("hostname "):
-				self.facts['[dev_hostname]'] = line.split()[1]
+				self.var['hostname'] = line.split()[1]
 				break
 
 	def get_facts_interfaces(self):
 		"""Interface Facts"""
-		self.facts["interfaces"] = {}
-		facts_ifs = self.facts["interfaces"]
-		for ifType, _ifs in self.if_types.items():
-			facts_ifs[ifType] = OrderedDict()
-			facts_if = facts_ifs[ifType]
-			for _if in _ifs:
-				facts_if[_if] = {}
-				ifFacts = facts_if[_if]
+		for ifType in self.if_types:
+			facts_if = self.iftype_ifvar[ifType]
+			for _if, ifFacts in facts_if.items():
+				# test = _if == 'HundredGigE1/0/9'
 				shrink_chars = self.shrink_characters(ifType, _if)
-				ifFacts['short_name'] = STR.shrink_if(_if, shrink_chars)
+				ifFacts['shortname'] = STR.shrink_if(_if, shrink_chars)
 				if ifType in ('AGGREGATED', 'LOOPBACK', 'VLAN', 'TUNNEL'): 
-					ifFacts['int_number'] = int(ifFacts['short_name'][2:])
+					ifFacts['int_number'] = int(ifFacts['shortname'][2:])
 				section_conf = self.get_section_config('ifs', _if)
-				ifFacts['address'] = self.int_address(section_conf)
 				ifFacts['description'] = self.int_description(section_conf)
-				ifFacts['port_status'] = self.int_port_status(section_conf)
-				ifFacts['udld_state'] = self.int_udld_state(section_conf)
+				ifFacts['portstatus'] = self.int_port_status(section_conf)
+				ifFacts['udld'] = self.int_udld_state(section_conf)
 				ifFacts['channel_group'] = self.int_ether_channel(section_conf)
 				ifFacts['switchport'] = self.int_vlans(section_conf)
-				ifFacts['[vrf]'] = self.int_vrf(section_conf)
-				ifFacts['helpers'] = self.int_helpers(section_conf)
+				ifFacts['vrf'] = self.int_vrf(section_conf)
+				ifFacts.update(self.int_helpers(section_conf))
+				ifFacts.update(self.int_address(section_conf))
 
 	def get_facts_vrfs(self):
 		"""vrf Facts"""
@@ -225,18 +232,10 @@ class CiscoTasks(Tasks):
 		for vrf in self.vrfs:
 			section_conf = self.get_section_config('vrfs', vrf)
 			facts_vrfs[vrf] = self.vrf_rd_rt(section_conf) 
-			facts_vrfs[vrf].update({'[vrf]': vrf})
+			facts_vrfs[vrf].update({'vrf': vrf})
 
 	def get_facts_vlans(self):
-		"""vlan Facts"""
-		self.facts["vlans"] = OrderedDict()
-		facts_vlans = self.facts["vlans"]
-		for vlan in self.vlans:
-			facts_vlans[vlan] = {}
-			section_conf = self.get_section_config('vlans', vlan)
-			desc = self.vlan_name(section_conf)	
-			facts_vlans[vlan]['vl_description'] = desc
-			facts_vlans[vlan]['allowed_ints'] = self.vlan_interfaces(vlan)
+		super().get_facts_vlans('cisco')
 
 	def get_facts_static(self):
 		"""static route facts"""
@@ -352,36 +351,39 @@ class CiscoTasks(Tasks):
 			if line.lstrip().startswith("ipv6 dhcp relay destination"):
 				v6helpers.append(line.split()[-1])
 				continue
-		return {'v4helpers': helpers, 
-				'v6helpers': v6helpers}
+		return {'dhcphelpers': helpers, 
+				'dhcpv6helpers': v6helpers}
 
 	def int_address(self, int_section_config):
 		"""IP Addressing on interface"""
 		subnet = ''
-		v4subnet_mask = ''
-		v4subnet_invmask = ''
 		v6subnet = ''
+		linklocal = ''
+		v6linklocal = ('fe80::',)
 		exluded_v6_candidates = ('link-local', 'anycast')
 		for line in int_section_config:
 			if not subnet and line.lstrip().startswith("ip address "):
 				binmask = line.split()[-1]
 				ip = line.split()[-2] + "/" + str(IP.bin2dec(binmask))
 				subnet = IPv4(ip)
-				v4subnet_mask = subnet.binmask
-				v4subnet_invmask = subnet.invmask
 				continue
-			if not v6subnet and line.lstrip().startswith("ipv6 address "):
-				l = line.split()
-				if l[-1] in exluded_v6_candidates: continue
-				v6subnet = IPv6(l[-1])
+			if line.lstrip().startswith("ipv6 address "):
+				spl = line.split()
+				ip = spl[2].lower()
+				exclude = False
+				for evc in v6linklocal:
+					if STR.found(ip, evc): 
+						exclude = True
+						linklocal = IPv6(ip+'/64')
+						break
+				if exclude: continue
+				if spl[-1] in exluded_v6_candidates: continue
+				v6subnet = IPv6(spl[-1])
 				break
-
-		address_vars = {'v4subnet': subnet,
-						'[v4subnet_mask]': v4subnet_mask,
-						'[v4subnet_invmask]': v4subnet_invmask,
-						'v6subnet': v6subnet, 
-						}
-		address_vars.update(self.int_v4address_extend(subnet))
+		address_vars = {
+			'inet4': {'address': subnet },
+			'inet6': {'address': v6subnet, 'linklocal': linklocal},
+			}
 		return address_vars
 
 	def int_vlans(self, int_section_config):
@@ -409,14 +411,12 @@ class CiscoTasks(Tasks):
 					trunk_vlans.extend(v)
 				continue
 		trunk_vlans =[int(vl) for vl in trunk_vlans]
-		variants = LST.list_variants(trunk_vlans)
 		return {'mode': mode,
-				'access_vlan': access_vlan,
-				'voice_vlan': voice_vlan,
-				'native_vlan': native_vlan,
-				'trunk_vlans': trunk_vlans,
-				'ssv_allowed_vlns': variants['ssv_list'],
-				'csv_allowed_vlns': variants['csv_list'], }
+				'accessvlan': access_vlan,
+				'nativevlan': native_vlan,
+				'voicevlan': voice_vlan,
+				'trunkvlans': trunk_vlans,
+			}
 
 	def int_ether_channel(self, int_section_config):
 		"""Port Channel config on interface"""
@@ -428,8 +428,8 @@ class CiscoTasks(Tasks):
 				channel_group = l[1]
 				channel_group_mode = l[-1]
 				break
-		return {'number': channel_group,
-				'mode': channel_group_mode,}
+		return {'ponumber': channel_group,
+				'pomode': channel_group_mode,}
 
 	""" Statics """
 

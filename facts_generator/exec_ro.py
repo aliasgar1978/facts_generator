@@ -12,8 +12,11 @@ class FactsGen():
 
 	def __str__(self): return self._repr()
 	
-	@property
+	@property			# old
 	def facts(self): return self.op.facts
+	@property			# new
+	def facts(self): return self.op.F
+
 	@property
 	def df_dic(self): return self.pod
 	@property

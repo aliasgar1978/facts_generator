@@ -4,6 +4,8 @@
 from collections import OrderedDict
 from nettoolkit import STR, Default
 
+from .templates import iftype_templ, ParametersTemplate as para
+
 # ---------------------------------------------------------------------------- #
 # General Functions
 # ---------------------------------------------------------------------------- #
@@ -57,9 +59,10 @@ class Tasks():
 		self.interface_aaza()
 		self.lldp_aaza()
 		self.get_facts_standard()
-		merge_vlan_intVlan(self.facts)
+		# merge_vlan_intVlan(self.facts)
 
 	def instance_var(self):
+		############### OLD SETS ###############
 		self.ifs, self.vrfs, self.vlans, self.vlan_member_names = [], [], [], []
 		self.ospf, self.bgp , self.routes = [], [], []
 		self.bgp_af = []
@@ -72,6 +75,30 @@ class Tasks():
 			"RANGE":[],
 			"MANAGEMENT": [],
 			}
+		############### NEW SETS ###############
+		self.ifloopbacks = {}
+		self.ifaggregates = {}
+		self.ifphysicals = {}
+		self.iftunnels = {}
+		self.ifvlans = {}
+		self.ifranges = {}
+		self.ifmanagement = {}
+		self.instances = {'global':{}, }
+		self.var = para.var()
+		self.jfacts = {'var': self.var, 'instances': self.instances,
+			'ifloopbacks': self.ifloopbacks , 'ifaggregates': self.ifaggregates, 
+			'ifphysicals': self.ifphysicals, 'iftunnels': self.iftunnels, 'ifvlans': self.ifvlans,
+			'ifranges': self.ifranges, 'ifmanagement': self.ifmanagement
+		}
+		self.iftype_ifvar = {
+			"LOOPBACK": self.ifloopbacks, 
+			"AGGREGATED": self.ifaggregates, 
+			"PHYSICAL": self.ifphysicals, 
+			"TUNNEL": self.iftunnels,
+			"VLAN": self.ifvlans,
+			"RANGE": self.ifranges,
+			"MANAGEMENT": self.ifmanagement,
+		}
 
 	def get_facts_standard(self):
 		self.get_facts_hostname()
@@ -84,7 +111,7 @@ class Tasks():
 		self.get_facts_bgp(isInstance=True)		
 		self.get_facts_lldp()
 		self.get_facts_int_status()
-		self.vrf_for_vlans()
+		# self.vrf_for_vlans()
 		self.get_facts_banner()
 		self.get_facts_snmp_location()
 
@@ -94,16 +121,17 @@ class Tasks():
 	def get_facts_lldp(self):
 		for interface in self.lldp_table:
 			phy_if, nbr_attributes = self.physical_interface_lldp_add_ons(interface)
-			ifs_on_dict = self.facts["interfaces"]["PHYSICAL"]
+			ifs_on_dict = self.iftype_ifvar["PHYSICAL"]
 			if not ifs_on_dict.get(phy_if): ifs_on_dict[phy_if] = {}
 			physical_if = ifs_on_dict[phy_if]
-			physical_if['neighbor'] = nbr_attributes
+			if nbr_attributes: 
+				physical_if['neighbour'].update(nbr_attributes)
 
 	"""on lldp-neighbours"""
 	def physical_interface_lldp_add_ons(self, interface_shortname):
 		"""-->neighbour details 'add_on' for given interface"""
-		for phy_if, if_attributes in self.facts["interfaces"]["PHYSICAL"].items():
-			if if_attributes["short_name"] == interface_shortname:
+		for phy_if, if_attributes in self.ifphysicals.items():
+			if if_attributes["shortname"] == interface_shortname:
 				nbr_hn = self.neighbor_hostname(interface_shortname)
 				add_on = {}
 				add_on['hostname'] = nbr_hn
@@ -132,9 +160,11 @@ class Tasks():
 
 	def physical_interface_int_status_add_ons(self, interface_shortname):
 		for int_type in self.if_types:
-			for phy_if, if_attributes in self.facts["interfaces"][int_type].items():
-				if if_attributes.get("short_name") and if_attributes["short_name"] == interface_shortname:
-					return (self.facts["interfaces"][int_type][phy_if], 
+			for phy_if, if_attributes in self.iftype_ifvar[int_type].items():
+				if if_attributes.get("shortname") and if_attributes["shortname"] == interface_shortname:
+					# return (self.facts["interfaces"][int_type][phy_if], 
+					# 		self.interface_status_para(interface_shortname))
+					return (self.iftype_ifvar[int_type][phy_if], 
 							self.interface_status_para(interface_shortname))
 
 	""" Interfaces """
@@ -151,9 +181,8 @@ class Tasks():
 	""" vlans """
 	def vrf_for_vlans(self):
 		"""vlan facts attributes using VlanCalculator"""
-		facts_vlans = self.facts["vlans"]
-		for vlan in facts_vlans:			
-			facts_vlans[vlan]["vlan_vrf"] = self.vrf_for_vlan(vlan)
+		for vlan, vlanattr in self.ifvlans.items():			
+			vlanattr["vrf"] = self.vrf_for_vlan(vlan)
 
 	def vrf_for_vlan(self, vlan):
 		""" -->vrf name for given vlan,	/Child
@@ -163,18 +192,17 @@ class Tasks():
 		else:
 			return ''
 
-
+	def get_facts_vlans(self, make):
+		"""vlan Facts"""
+		for vlan, vlanattr in self.ifvlans.items():
+			vlanattr['allowedints'] = self.vlan_interfaces(vlan)
+			vlID = vlan
+			if make == 'juniper': vlID = vlanattr['vl_identifier']
+			section_conf = self.get_section_config('vlans', vlID)
+			desc = self.vlan_name(section_conf)	
+			vlanattr['vlandesc'] = desc
 
 	""" IP Address + n """
-
-	def int_v4address_extend(self, v4Obj):
-		extended_subnet = {}
-		for i in range(self.number_of_max_extended_ips):
-			try:
-				extended_subnet['+'+str(i)+']']  = v4Obj.n_thIP(i, False)
-				extended_subnet['+'+str(i)+'/mm]']  = v4Obj.n_thIP(i, True)
-			except: break
-		return extended_subnet
 
 	def get_vlans_from_range(self, vl_string):
 		if isinstance(vl_string, (list, tuple)):
@@ -197,7 +225,8 @@ class Tasks():
 	def vlan_interfaces(self, vlan):
 		"""interfaces list on which given vlan is allowed"""
 		allowed_ints = []
-		for intType, intType_values in self.facts['interfaces'].items():
+		for intType, intType_values in self.iftype_ifvar.items():
+			if intType == 'VLAN': continue
 			for _int, int_attributes in intType_values.items():
 				try:
 					if vlan in int_attributes['switchport']['trunk_vlans']:
@@ -235,5 +264,10 @@ class Tasks():
 			else:
 				break
 		return i
+
+	def add_aaza(self, item, items, item_template):
+		if item not in items:
+			items[item] = item_template()
+
 
 # ---------------------------------------------------------------------------- #

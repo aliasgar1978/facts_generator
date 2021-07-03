@@ -5,6 +5,7 @@ from collections import OrderedDict
 from nettoolkit import IPv4, IPv6, STR, LST
 
 from .tasks import Tasks
+from .templates import iftype_templ, ParametersTemplate as para
 
 # ----------------------------------------------------------------------------
 # Device / IDENTIFIERS/ STARTERS/ COLUMN INDEXES - JUNIPER
@@ -98,49 +99,39 @@ class JuniperTasks(Tasks):
 				'bgp_af': self.bgp_af,
 				}
 
-	def aaza_vlans(self, line):
-		"""add new vlan to aaza"""
-		spl = line.split()
-		vlan = int(spl[-1])
-		if vlan not in self.vlans:
-			self.vlans.append(vlan)
-			self.vlan_member_names.append(spl[2])
-
 	def aaza_vrfs(self, line):
 		"""add new vrf to aaza"""
 		spl = line.split()
 		if spl[2] not in self.vrfs:
 			self.vrfs.append(spl[2])
 
+	def aaza_vlans(self, line):
+		"""add new vlan to aaza"""
+		spl = line.split()
+		vlan = int(spl[-1])
+		self.add_aaza(vlan, self.ifvlans, para.ifvlan)
+		self.ifvlans[vlan]['vl_identifier'] = spl[2]
+
 	def aaza_ifs(self, line):
 		"""add new interface to aaza"""
 		spl = line.split()
 		if spl[2] in ('irb', 'vlan'):
 			vlan = int(spl[4])
-			self.ifs.append(vlan)
-			if vlan not in self.if_types['VLAN']:
-				self.if_types['VLAN'].append(vlan)
+			self.add_aaza(vlan, self.ifvlans, para.ifvlan)
 		elif spl[2].startswith(self.ifs_identifiers['LOOPBACK']):
 			try:
 				unit = int(spl[4])
-				self.ifs.append(unit)
-				if unit not in self.if_types['LOOPBACK']:
-					self.if_types['LOOPBACK'].append(unit)
+				self.add_aaza(unit, self.ifloopbacks, para.ifloopback)
 			except: pass
 		elif spl[2] == self.ifs_identifiers['RANGE']:
 			range_name = spl[3]
-			self.ifs.append(range_name)
-			if range_name not in self.if_types['RANGE']:
-				self.if_types['RANGE'].append(range_name)
+			self.add_aaza(range_name, self.ifranges, para.ifrange)
 		else:
-			if spl[2] not in self.ifs:
-				self.ifs.append(spl[2])
-				for int_type, int_types in self.ifs_identifiers.items():
-					if int_type in ("VLAN", "LOOPBACK", "RANGE"): continue
-					for int_type_type in int_types:
-						if int_type_type in spl[2]:
-							self.if_types[int_type].append(spl[2])
-							break
+			for int_type, int_types in self.ifs_identifiers.items():
+				if int_type in ("VLAN", "LOOPBACK", "RANGE"): continue
+				for int_type_type in int_types:
+					if int_type_type in spl[2]:
+						self.add_aaza(spl[2], self.iftype_ifvar[int_type], iftype_templ(int_type))
 
 	def interface_aaza(self):
 		"""Interface Aaza from interface status"""
@@ -161,8 +152,8 @@ class JuniperTasks(Tasks):
 							port_detail = self.interfaces_table[detail]
 							continue
 					port_detail[header_item] = detail
-				port_detail['l1_status'] = port_detail['Admin']
-				port_detail['l2_status'] = port_detail['Link']
+				port_detail['adminstatus'] = port_detail['Admin']
+				port_detail['linkstatus'] = port_detail['Link']
 				del(port_detail['Admin'])
 				del(port_detail['Link'])
 
@@ -186,31 +177,43 @@ class JuniperTasks(Tasks):
 		"""device hostname"""
 		for line in self.run_list:
 			if line.startswith("set system host-name "):
-				self.facts['[dev_hostname]'] = line.split()[-1]
+				self.var['hostname'] = line.split()[-1]
+				# self.facts['[dev_hostname]'] = line.split()[-1]
 				break
 
 	def get_facts_interfaces(self):
 		"""Interface Facts"""
-		self.facts["interfaces"] = {}
-		facts_ifs = self.facts["interfaces"]
-		for ifType, _ifs in self.if_types.items():
-			facts_ifs[ifType] = OrderedDict()
-			facts_if = facts_ifs[ifType]
-			for _if in _ifs:
-				facts_if[_if] = {}
-				ifFacts = facts_if[_if]
+		for ifType in self.if_types:
+			facts_if = self.iftype_ifvar[ifType]
+			for _if, ifFacts in facts_if.items():
 				section_conf = self.get_section_config('ifs', _if)
-				ifFacts['short_name'] = _if
+				ifFacts['shortname'] = _if
 				try:
 					ifFacts['int_number'] = int(_if)
 				except:
 					ifFacts['int_number'] = None
-				ifFacts['address'] = self.int_address(section_conf)
+				test = ifType == "PHYSICAL"
 				ifFacts['description'] = self.int_description(section_conf)
-				ifFacts['port_status'] = self.int_port_status(section_conf)
-				ifFacts['udld_state'] = self.int_udld_state(section_conf)
-				ifFacts['channel_group'] = self.int_ether_channel(section_conf)
-				ifFacts['switchport'] = self.int_vlans(section_conf)
+				ifFacts['portstatus'] = self.int_port_status(section_conf)
+				ifFacts['udld'] = self.int_udld_state(section_conf)
+				ifFacts.update(self.int_ether_channel(section_conf))
+				if ifType not in ('VLAN', 'LOOPBACK'):
+					ifFacts['switchport'] = self.int_vlans(section_conf)
+				if ifType not in ('VLAN', 'MANAGEMENT'):
+					ifFacts['l2orl3'] = self.get_l2orl3(section_conf)
+				if ifType in ("AGGREGATED", ) and ifFacts['l2orl3'] == 'l2':
+					ifFacts['vlanmembers'] = self.int_vlan_members(section_conf)
+				else:
+					ifFacts.update(self.int_address(section_conf, test))
+
+	def int_vlan_members(self, int_section_config):
+		"""aggregated interface member vlan/subint"""
+		members = set()
+		for line in int_section_config:
+			spl = line.split()
+			if spl[3] == 'unit':
+				members.add(int(spl[4]))
+		return members
 
 	def get_facts_vrfs(self):
 		"""vrf Facts"""
@@ -221,18 +224,10 @@ class JuniperTasks(Tasks):
 			self.vrf_int_vrf(section_conf)
 			self.vrf_int_helpers(section_conf)
 			facts_vrfs[vrf] = self.vrf_rd_rt(section_conf)
-			facts_vrfs[vrf].update({'[vrf]': vrf})
+			facts_vrfs[vrf].update({'vrf': vrf})
 
 	def get_facts_vlans(self):
-		"""vlan Facts"""
-		self.facts["vlans"] = OrderedDict()
-		facts_vlans = self.facts["vlans"]
-		for vlan, vl_mb_nm in zip(self.vlans, self.vlan_member_names):
-			facts_vlans[vlan] = {}
-			section_conf = self.get_section_config('vlans', vl_mb_nm)
-			desc = self.vlan_name(section_conf)	
-			facts_vlans[vlan]['vl_description'] = desc
-			facts_vlans[vlan]['allowed_ints'] = self.vlan_interfaces(vlan)
+		super().get_facts_vlans('juniper')
 
 	def get_facts_static(self):
 		"""static route facts"""
@@ -298,8 +293,8 @@ class JuniperTasks(Tasks):
 				else:
 					_if = spl[-1].split(".")[0]
 				# -------------------------------
-				if self.facts['interfaces'][ifType].get(_if):
-					self.facts['interfaces'][ifType][_if]['[vrf]'] = spl[2]
+				if self.iftype_ifvar[ifType].get(_if):
+					self.iftype_ifvar[ifType][_if]['vrf'] = spl[2]
 
 	def vrf_int_helpers(self, int_section_config):
 		"""set helper ip's for particular interface"""
@@ -312,13 +307,13 @@ class JuniperTasks(Tasks):
 				ifType = self.int_type(vrf_int)
 				# -------------------------------
 				# doubtful - double check below 
-				if ifType in ("VLAN", "LOOPBACK"):
+				if ifType in ("VLAN", ):
 					_if = int(spl[-1].split(".")[-1])
 				else:
 					_if = spl[-1].split(".")[0]
 				# -------------------------------
-				if self.facts['interfaces'][ifType].get(_if):
-					self.facts['interfaces'][ifType][_if]['helpers'] = helpers
+				if self.iftype_ifvar[ifType].get(_if):
+					self.iftype_ifvar[ifType][_if].update(helpers)
 
 	def vrf_helpers(self, int_section_config):
 		"""set helper ip's for particular vrf's"""
@@ -329,10 +324,22 @@ class JuniperTasks(Tasks):
 				helpers.append(spl[-1])
 			if STR.found(line, 'dhcp-relay dhcpv6 server-group'):
 				v6helpers.append(spl[-1])
-		return {'v4helpers': helpers, 
-				'v6helpers': v6helpers}
+		return {'dhcphelpers': helpers, 
+				'dhcpv6helpers': v6helpers}
 
 	""" Interfaces """
+
+	def get_l2orl3(self, int_section_config):
+		"""interface type - L2 or L3 """
+		l2orl3 = 'l3'
+		for line in int_section_config:
+			spl = line.split()
+			try:
+				if spl[3] == 'unit' and (1 <= int(spl[4]) <= 4092 or STR.found(line, 'vlan members')):
+					l2orl3 = 'l2'
+					break
+			except: continue
+		return l2orl3
 
 	def int_port_status(self, int_section_config):
 		"""status of port"""
@@ -362,13 +369,12 @@ class JuniperTasks(Tasks):
 					if int_type_type in interface:
 						return int_type
 		
-	def int_address(self, int_section_config):
+	def int_address(self, int_section_config, test=False):
 		"""IP Addressing on interface"""
 		subnet = ''
-		v4subnet_mask = ''
-		v4subnet_invmask = ''
 		v6subnet = ''
-		exluded_v6_candidates = ('fe80::',)
+		linklocal = ''
+		v6linklocal = ('fe80::',)
 		for line in int_section_config:
 			# if test: print(line)
 			if not subnet and STR.found(line, "family inet address "):
@@ -376,27 +382,24 @@ class JuniperTasks(Tasks):
 				ip_idx = spl.index('inet') + 2
 				ip = spl[ip_idx]
 				subnet = IPv4(ip)
-				v4subnet_mask = subnet.binmask
-				v4subnet_invmask = subnet.invmask
 				continue
 			if not v6subnet and STR.found(line, "family inet6 address "):
 				spl = line.split()
 				ip_idx = spl.index('inet6') + 2
 				ip = spl[ip_idx]
 				exclude = False
-				for evc in exluded_v6_candidates:
+				for evc in v6linklocal:
 					if STR.found(ip, evc): 
 						exclude = True
+						linklocal = IPv6(ip)
 						break
 				if exclude: continue
 				v6subnet = IPv6(ip)
 				break
-		address_vars = {'v4subnet': subnet,
-						'[v4subnet_mask]': v4subnet_mask,
-						'[v4subnet_invmask]': v4subnet_invmask,
-						'v6subnet': v6subnet, 
-						}
-		address_vars.update(self.int_v4address_extend(subnet))
+		address_vars = {
+			'inet4': {'address': subnet },
+			'inet6': {'address': v6subnet, 'linklocal': linklocal},
+			}
 		return address_vars
 
 	def int_vlans(self, int_section_config):
@@ -419,14 +422,12 @@ class JuniperTasks(Tasks):
 					for x in v: trunk_vlans.append(int(x))
 				continue
 			### Voice vlan set - to be implemented
-		variants = LST.list_variants(trunk_vlans)
 		return {'mode': mode,
-				'access_vlan': access_vlan,
-				'native_vlan': native_vlan,
-				'voice_vlan': voice_vlan,
-				'trunk_vlans': trunk_vlans,
-				'ssv_allowed_vlns': variants['ssv_list'],
-				'csv_allowed_vlns': variants['csv_list'], }
+				'accessvlan': access_vlan,
+				'nativevlan': native_vlan,
+				'voicevlan': voice_vlan,
+				'trunkvlans': trunk_vlans,
+				}
 
 	def int_ether_channel(self, int_section_config):
 		"""Port Channel config on interface"""
@@ -439,8 +440,8 @@ class JuniperTasks(Tasks):
 				section_conf = self.get_section_config('ifs', channel_group)
 				channel_group_mode = self.int_ether_channel_mode(section_conf)
 				break
-		return {'number': channel_group,
-				'mode': channel_group_mode,}
+		return {'ponumber': channel_group,
+				'pomode': channel_group_mode,}
 
 	def int_ether_channel_mode(self, int_section_config):
 		"""-->Port Channel mode on interface / child"""
@@ -481,9 +482,8 @@ class JuniperTasks(Tasks):
 						attribute = routes[subnet_header]
 						if next_hop: attribute.update({'next_hop': next_hop})
 						subnet_header = subnet
-				if vrf: attribute.update({'[vrf]': vrf})
+				if vrf: attribute.update({'vrf': vrf})
 				if tag: attribute.update({'tag': tag})
-
 		return routes
 
 
