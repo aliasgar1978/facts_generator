@@ -5,36 +5,18 @@ from collections import OrderedDict
 import pandas as pd 
 
 from .init_tasks import InitTask
-from .tasks import Tasks, flat_dict, merge_vlan_intVlan
+from .tasks import Tasks
+from nettoolkit import ConvDict
 
 # ---------------------------------------------------------------------------- #
 
 table_items = ('interfaces', 'vlans', 'statics', 'vrfs', 'ospf')
 
-# ---------------------------------------------------------------------------- #
-# General Usage functions
-# ---------------------------------------------------------------------------- #
-
-def create_add_map_def(n):
-	""" Create an Address MAP Dictionary for n number of IPs """
-	dic = {}
-	for i in range(n):
-		dic['address_+' + str(i) + "]"] = "[Subnet+" + str(i)+ "]"
-		dic['address_+' + str(i) + "/mm]"] = "[Subnet+" + str(i)+ "/mm]"
-	return dic
 
 # ---------------------------------------------------------------------------- #
 # Class: Convert Device Facts to DataFrames
 # ---------------------------------------------------------------------------- #
 
-# DEVICE SPECIFIC VAR ATTRIBUTES
-def device_var_attrib(dev_var_attribs, varattrib=None):
-    '''--> append device var attribute dict'''
-    if varattrib is None: varattrib = {"FIND":[], "REPLACE":[]}
-    for k, v in dev_var_attribs.items():
-        varattrib['FIND'].append(k)
-        varattrib['REPLACE'].append(v)
-    return varattrib
 
 class FactsToDf():
 
@@ -43,22 +25,58 @@ class FactsToDf():
 		customer_var=None,
 		):
 		self.customer_var = customer_var
+		self.var_dict(facts)
+		self.table_dict(facts)
+		# self.convert_dictionary(facts)
+		self.convert_dictionary()
+
+	def convert_dictionary(self):
+		facts = {'table': self.table_dic}
+		facts.update(self.var_dic)
+		
+		# from pprint import pprint
+		# pprint(facts['table'])
+
+		cd = ConvDict(facts)
+		cd.set_var_table_keys(var='var', table='table')
+		cd.set_index_keys_parents()
+		self.var_df = cd.to_dataframe('var')
+		self.table_df = cd.to_dataframe('table')
+
+		print(self.table_df)
+		
+		return
+		# bypassed temporarily
 		self.process_table(facts)
 		self.process_var(facts)
 
+	def table_dict(self, facts):
+		self.table_dic = {k:v for k,v in facts.items() if k != 'var'} 
+		del(self.table_dic['instances'])
+	def var_dict(self, facts):
+		self.var_dic = {k:v for k,v in facts.items() if k == 'var'} 
+
 	def set_custom_variables(self, map_sheet=None):
+		return
+		# bypassed temporarily
 		if not map_sheet: return None
 		self.custom_table_header_update(map_sheet)
 		self.custom_var_update(map_sheet)
 
 	@staticmethod
 	def get_custom_variables_dict(map_sheet, sheet_name):
+		return
+		# bypassed temporarily
 		df_map = pd.read_excel(map_sheet, sheet_name=sheet_name).fillna("")
 		df_map = df_map.set_index("STANDARD")
 		df_map = df_map[df_map['CUSTOM'] != ""]
 		return df_map.to_dict()["CUSTOM"]
 
 	def process_var(self, facts):
+
+		return
+		# bypassed temporarily
+		# old way
 		self.var_facts = {k: v for k, v in facts.items() 
 						if k  not in table_items }
 		var_facts = device_var_attrib(self.var_facts)
@@ -68,6 +86,8 @@ class FactsToDf():
 			self.custom_var_append()
 
 	def custom_var_update(self, map_sheet):
+		return
+		# bypassed temporarily
 		self.df_var = self.df_var.set_index("FIND")
 		self.df_var = self.df_var.T
 		custom_vars = self.get_custom_variables_dict(map_sheet, 'var')
@@ -75,24 +95,34 @@ class FactsToDf():
 		self.df_var = self.df_var.T
 
 	def custom_var_append(self):
+		return
+		# bypassed temporarily
 		self.df_customer_var = pd.DataFrame(self.customer_var)
 		self.df_var = self.df_var.append(self.df_customer_var)
 
 	def process_table(self, facts):
-		merge_vlan_intVlan(facts)
+
+		return
+		# bypassed temporarily
+		# old way
+		# merge_vlan_intVlan(facts)
 		table_facts = {k: v for k, v in facts.items() 
 					if k in table_items }
 		self.df_table = self.dataFrame_table(table_facts)
-		self.df_table.rename(
-			columns=create_add_map_def(Tasks.number_of_max_extended_ips), 
-			inplace=True)
+		# self.df_table.rename(
+		# 	columns=create_add_map_def(Tasks.number_of_max_extended_ips), 
+		# 	inplace=True)
 
 
 	def custom_table_header_update(self, map_sheet):
+		return
+		# bypassed temporarily
 		custom_tables = self.get_custom_variables_dict(map_sheet, 'tables')
 		self.df_table.rename(columns=custom_tables, inplace=True)
 
 	def dataFrame_table(self, table_facts):
+		return
+		# bypassed temporarily
 		table = {}
 
 		# -- interfaces
@@ -121,6 +151,8 @@ class FactsToDf():
 		return df_table
 
 	def dataFrame_var(self, var_facts):
+		return
+		# bypassed temporarily
 		target_d = { 'FIND':[], 'REPLACE':[] }
 		for x, y in zip(var_facts['FIND'], var_facts['REPLACE']):
 			if not isinstance(y, dict):
@@ -132,16 +164,6 @@ class FactsToDf():
 				target_d['FIND'].append(k)
 				target_d['REPLACE'].append(v)
 		return target_d
-
-
-def flatten_dict(parent_key, child_dict):
-	new_dict = {}
-	for key, value in child_dict.items():
-		if not isinstance(value, (dict,OrderedDict)):
-			new_dict[parent_key+"_"+key] = value
-		else:
-			new_dict.update(flatten_dict(parent_key+"_"+str(key), value))
-	return new_dict
 
 
 # ---------------------------------------------------------------------------- #
@@ -166,22 +188,16 @@ class Output_Process():
 		self.fToD = FactsToDf(self.facts,
 			customer_var=customer_var,
 			)
-		self.fToD.set_custom_variables(map_sheet)
-		hostname = self.facts['[dev_hostname]']
-		tables_df = self.fToD.df_table
-		var_df = self.fToD.df_var
-		index = True
-		self.df_args = {'hostname':hostname, 
-			'tables': tables_df, 
-			'var': var_df, 
-			'index': index
-			}
+		self.var_df = self.fToD.var_df
+		self.table_df = self.fToD.table_df
+		# self.fToD.set_custom_variables(map_sheet)
+		hostname = self.facts['var']['hostname']
 
 	def output_parse(self, files=None):
 		if not isinstance(files, (dict, str)):
 			raise Exception("Incorrect Input `files` should be in dict of lists or single file string")
 		iT = InitTask(files=files)
-		self._facts = iT.tasks.facts
+		self._facts = iT.tasks.jfacts
 		self.F = iT.tasks
 
 

@@ -15,7 +15,7 @@ class FactsGen():
 	@property			# old
 	def facts(self): return self.op.facts
 	@property			# new
-	def facts(self): return self.op.F
+	def facts(self): return self.op
 
 	@property
 	def df_dic(self): return self.pod

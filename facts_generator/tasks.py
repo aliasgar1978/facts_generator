@@ -32,13 +32,13 @@ def flat_dict(given_int_dictionary, int_type=None):
 	return d
 
 
-def merge_vlan_intVlan(facts):
-	intvlan_attribs = facts['vlans']
-	for vlnumber, vlanattrib in intvlan_attribs.items():
-		for intvl, intvlattr in facts['interfaces']['VLAN'].items():
-			if vlnumber == intvlattr['int_number']:
-				intvlattr.update(vlanattrib)
-				break
+# def merge_vlan_intVlan(facts):
+# 	intvlan_attribs = facts['vlans']
+# 	for vlnumber, vlanattrib in intvlan_attribs.items():
+# 		for intvl, intvlattr in facts['interfaces']['VLAN'].items():
+# 			if vlnumber == intvlattr['int_number']:
+# 				intvlattr.update(vlanattrib)
+# 				break
 
 # ---------------------------------------------------------------------------- #
 # Common Tasks
@@ -63,8 +63,7 @@ class Tasks():
 
 	def instance_var(self):
 		############### OLD SETS ###############
-		self.ifs, self.vrfs, self.vlans, self.vlan_member_names = [], [], [], []
-		# self.vrfs, self.vlans, self.vlan_member_names = [], [], []
+		self.vrfs, self.vlans, self.ifs = [], [], []
 		self.ospf, self.bgp , self.routes = [], [], []
 		self.bgp_af = []
 		self.if_types = {

@@ -16,16 +16,19 @@ capture_file = datapath + "switch_op1.log"
 fg = FactsGen()
 fg.parse(capture_file)
 
+fg.process()
+
 # custom processes on fg.facts to add/modify facts
 
-pprint(fg.facts.var)
+# print(fg.facts.table_df)
+
+# pprint(fg.facts.jfacts)
+
 # pprint(fg.facts.ifvlans)
 # pprint(fg.facts.ifphysicals)#['HundredGigE1/0/3'])
 # pprint(fg.facts.ifloopbacks)	
 # pprint(fg.facts.ifaggregates)
 # pprint(fg.facts.ifranges)
-
-
 """
 fg.process(
     # map_sheet=custom_map_excelsheet,                  # optional
