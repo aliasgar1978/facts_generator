@@ -397,8 +397,8 @@ class JuniperTasks(Tasks):
 				v6subnet = IPv6(ip)
 				break
 		address_vars = {
-			'inet4': {'address': subnet },
-			'inet6': {'address': v6subnet, 'linklocal': linklocal},
+			'inet4': {'address': str(subnet) },
+			'inet6': {'address': str(v6subnet), 'linklocal': str(linklocal)},
 			}
 		return address_vars
 
