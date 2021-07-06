@@ -17,6 +17,8 @@ fg = FactsGen()
 fg.parse(capture_file)
 
 fg.process()
+fg.to_file(datapath)
+
 
 # custom processes on fg.facts to add/modify facts
 
